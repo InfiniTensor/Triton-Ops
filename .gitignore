@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+# 模型权重、大数据文件不进仓库
+*.safetensors
+*.bin
+models/
+
+# 本地运行产物不入库
+results/
+*.log
