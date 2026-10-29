@@ -60,4 +60,6 @@ for dtype in (torch.float32, torch.float16):
             record = {"dtype": str(dtype), "rows": rows, "error": str(exc)}
         records.append(record)
         print(json.dumps(record), flush=True)
-(Path(__file__).resolve().parents[1] / "results/diagnostic_rotary_position_embedding.json").write_text(json.dumps(records, indent=2))
+_rope_out = Path(__file__).resolve().parents[1] / "results/diagnostic_rotary_position_embedding.json"
+_rope_out.parent.mkdir(parents=True, exist_ok=True)
+_rope_out.write_text(json.dumps(records, indent=2))

@@ -38,6 +38,7 @@ def main():
         report = {"environment": bench._env_info(), "seed": 20261022,
                   "acceptance_status": "not_certified_error_definition_pending", "samples": rows}
         path = Path(__file__).resolve().parents[1] / "results" / f"accuracy_{op}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

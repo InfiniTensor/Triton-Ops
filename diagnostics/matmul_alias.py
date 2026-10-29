@@ -33,4 +33,6 @@ for label, bias in [("unused_alias_of_output", out), ("unused_none", None)]:
            "engineering_allclose": correct, "p20_p50_p80_ms": timings, "restrict_attributes": hints}
     records.append(row)
     print(json.dumps(row), flush=True)
-(Path(__file__).resolve().parents[1] / "results/diagnostic_mm_alias.json").write_text(json.dumps(records, indent=2))
+_alias_out = Path(__file__).resolve().parents[1] / "results/diagnostic_mm_alias.json"
+_alias_out.parent.mkdir(parents=True, exist_ok=True)
+_alias_out.write_text(json.dumps(records, indent=2))

@@ -75,6 +75,7 @@ def main():
                                    "attention_heads": 32, "kv_heads": 8, "rms_norm_eps": 1e-5,
                                    "native_dtype": "bfloat16"}, "samples": records}
         path = Path(__file__).resolve().parents[1] / "results" / f"model_{op}.json"
+        path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
 
 

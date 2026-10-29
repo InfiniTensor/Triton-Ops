@@ -117,6 +117,28 @@ def test_pow_square_one_elem_tensor(dtype):
     _check(z, x * x, dtype)
 
 
+@pytest.mark.parametrize("n", SHAPES)
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
+@pytest.mark.parametrize("exponent", [3.0, 0.5])
+def test_pow_scalar_non2_triton(n, dtype, exponent):
+    """Non-2 Python-scalar exponents take the broadcast path (no out-of-bounds read of a 1-element tensor)."""
+    x = torch.rand(n, dtype=dtype, device=DEVICE) * 2 + 0.1  # [0.1, 2.1)
+    z = torch.empty_like(x)
+    triton_impl.pow(x, exponent, z)
+    _check(z, torch.pow(x, exponent), dtype)
+
+
+@pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
+@pytest.mark.parametrize("exponent", [3.0, 0.5])
+def test_pow_one_elem_tensor_non2(dtype, exponent):
+    """A single-element exponent tensor with a value other than 2.0 also broadcasts."""
+    x = torch.rand(1024, dtype=dtype, device=DEVICE) * 2 + 0.1
+    z = torch.empty_like(x)
+    y = torch.full((1,), exponent, dtype=dtype, device=DEVICE)
+    triton_impl.pow(x, y, z)
+    _check(z, torch.pow(x, y), dtype)
+
+
 @pytest.mark.parametrize("n", [1024])
 @pytest.mark.parametrize("dtype", [torch.float32, torch.float16])
 def test_square_triton(n, dtype):

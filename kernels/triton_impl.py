@@ -521,6 +521,18 @@ def _pow_kernel(x_ptr, y_ptr, z_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
     tl.store(z_ptr + offsets, z.to(z_ptr.dtype.element_ty), mask=mask)
 
 
+@triton.autotune(configs=_EW_CONFIGS, key=["n_elements"])
+@triton.jit
+def _pow_scalar_kernel(x_ptr, y, z_ptr, n_elements, BLOCK_SIZE: tl.constexpr):
+    # broadcast path: the exponent arrives by value, so nothing is read beyond x's length
+    pid = tl.program_id(axis=0)
+    offsets = pid * BLOCK_SIZE + tl.arange(0, BLOCK_SIZE)
+    mask = offsets < n_elements
+    x = tl.load(x_ptr + offsets, mask=mask)
+    z = libdevice.pow(x.to(tl.float32), y)
+    tl.store(z_ptr + offsets, z.to(z_ptr.dtype.element_ty), mask=mask)
+
+
 def _is_scalar_two(y):
     """Whether the exponent is scalar 2.0: free for Python numbers; a single-element tensor needs one value read back (microsecond sync)."""
     if isinstance(y, (int, float)):
@@ -531,13 +543,22 @@ def _is_scalar_two(y):
 
 
 def pow(x, y, z):
-    """z = x ** y; inputs are 1-D contiguous tensors whose elements must be positive."""
+    """z = x ** y; inputs are 1-D contiguous tensors whose elements must be positive.
+
+    The exponent may also be a Python scalar or a single-element tensor: both are
+    broadcast by passing the exponent to the kernel by value, so the kernel never
+    reads past the end of a 1-element tensor.
+    """
     if _is_scalar_two(y):
         return square(x, z)  # rms_norm's squaring usage: take the x*x fast path
-    if not torch.is_tensor(y):
-        y = torch.full((1,), float(y), dtype=x.dtype, device=x.device)
     n = x.numel()
     grid = lambda META: (triton.cdiv(n, META["BLOCK_SIZE"]),)  # grid follows the block size chosen by autotune
+    if not torch.is_tensor(y):
+        _pow_scalar_kernel[grid](x, float(y), z, n)
+        return z
+    if y.numel() == 1:
+        _pow_scalar_kernel[grid](x, float(y.item()), z, n)  # one value read back (microsecond sync), then broadcast by value
+        return z
     _pow_kernel[grid](x, y, z, n)
     return z
 

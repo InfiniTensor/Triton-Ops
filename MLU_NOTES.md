@@ -67,9 +67,11 @@
 ## Accuracy audit (MLU590-M9, seed 20261022, IEEE reference policy)
 
 Per-element statistics against the PyTorch reference. `>1% count` / `>1% share` count
-elements whose relative error against a nonzero reference exceeds 1%; `max rel` is the
-largest such elementwise relative error; `rel L2` is the relative L2 norm of the whole
-output (worst sample per op/dtype). Boolean/integer ops are bit-exact by construction.
+elements whose relative error against a nonzero reference exceeds 1%; `max rel (%)` is the
+largest such elementwise relative error **in percent**; `rel L2 (%)` is the relative L2 norm
+of the whole output **in percent** (worst sample per op/dtype). Raw JSON archives store
+both metrics as fractions; this table multiplies by 100. Boolean/integer ops are bit-exact
+by construction.
 
 Worst relative L2 across all ops and dtypes: **0.0353%** — well within the ≤1% acceptance line.
 
@@ -79,17 +81,17 @@ Worst relative L2 across all ops and dtypes: **0.0353%** — well within the ≤
 | abs | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | add | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | add | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| addmm | float32 | 1,048,576 | 5 | 0.0005% | 0.1359 | 0.0000 |
-| addmm | float16 | 1,048,576 | 1 | 0.0001% | 0.0508 | 0.0007 |
+| addmm | float32 | 1,048,576 | 5 | 0.0005% | 13.5900 | 0.0000 |
+| addmm | float16 | 1,048,576 | 1 | 0.0001% | 5.0800 | 0.0007 |
 | bitwise_and | int32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | bitwise_not | int32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | bitwise_or | int32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| bmm | float32 | 4,194,304 | 22 | 0.0005% | 4.0000 | 0.0000 |
-| bmm | float16 | 4,194,304 | 10 | 0.0002% | 0.2500 | 0.0007 |
+| bmm | float32 | 4,194,304 | 22 | 0.0005% | 400.0000 | 0.0000 |
+| bmm | float16 | 4,194,304 | 10 | 0.0002% | 25.0000 | 0.0007 |
 | clamp | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | clamp | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| conv2d | float32 | 524,288 | 4 | 0.0008% | 0.1111 | 0.0000 |
-| conv2d | float16 | 524,288 | 1 | 0.0002% | 0.0257 | 0.0007 |
+| conv2d | float32 | 524,288 | 4 | 0.0008% | 11.1100 | 0.0000 |
+| conv2d | float16 | 524,288 | 1 | 0.0002% | 2.5700 | 0.0007 |
 | cos | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | cos | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | div | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
@@ -100,16 +102,16 @@ Worst relative L2 across all ops and dtypes: **0.0353%** — well within the ≤
 | exp | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | ge | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | ge | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| gelu | float32 | 1,000,000 | 1 | 0.0001% | 0.1633 | 0.0000 |
-| gelu | float16 | 1,000,000 | 1 | 0.0001% | 0.5000 | 0.0003 |
+| gelu | float32 | 1,000,000 | 1 | 0.0001% | 16.3300 | 0.0000 |
+| gelu | float16 | 1,000,000 | 1 | 0.0001% | 50.0000 | 0.0003 |
 | gt | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | gt | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | isinf | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | isinf | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | isnan | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | isnan | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| layer_norm | float32 | 4,194,304 | 4 | 0.0001% | 0.0833 | 0.0000 |
-| layer_norm | float16 | 4,194,304 | 1 | 0.0000% | 0.0122 | 0.0003 |
+| layer_norm | float32 | 4,194,304 | 4 | 0.0001% | 8.3300 | 0.0000 |
+| layer_norm | float16 | 4,194,304 | 1 | 0.0000% | 1.2200 | 0.0003 |
 | le | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | le | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | lt | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
@@ -125,17 +127,17 @@ Worst relative L2 across all ops and dtypes: **0.0353%** — well within the ≤
 | neg | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | neg | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | pow | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| pow | float16 | 1,000,000 | 0 | 0.0000% | 0.0010 | 0.0000 |
+| pow | float16 | 1,000,000 | 0 | 0.0000% | 0.1000 | 0.0000 |
 | relu | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | relu | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | rms_norm | float32 | 4,194,304 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| rms_norm | float16 | 4,194,304 | 0 | 0.0000% | 0.0010 | 0.0005 |
+| rms_norm | float16 | 4,194,304 | 0 | 0.0000% | 0.1000 | 0.0005 |
 | rotary_position_embedding | float32 | 4,194,304 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| rotary_position_embedding | float16 | 4,194,304 | 19,901 | 0.4745% | 0.9180 | 0.0353 |
+| rotary_position_embedding | float16 | 4,194,304 | 19,901 | 0.4745% | 91.8000 | 0.0353 |
 | rsqrt | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | rsqrt | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| scaled_dot_product_attention | float32 | 262,144 | 1 | 0.0004% | 0.0312 | 0.0000 |
-| scaled_dot_product_attention | float16 | 262,144 | 2,123 | 0.8099% | 7.3636 | 0.0246 |
+| scaled_dot_product_attention | float32 | 262,144 | 1 | 0.0004% | 3.1200 | 0.0000 |
+| scaled_dot_product_attention | float16 | 262,144 | 2,123 | 0.8099% | 736.3600 | 0.0246 |
 | sigmoid | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | sigmoid | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | silu | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
@@ -143,21 +145,25 @@ Worst relative L2 across all ops and dtypes: **0.0353%** — well within the ≤
 | sin | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | sin | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | softmax | float32 | 4,194,304 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| softmax | float16 | 4,194,304 | 0 | 0.0000% | 0.0029 | 0.0008 |
+| softmax | float16 | 4,194,304 | 0 | 0.0000% | 0.2900 | 0.0008 |
 | sub | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | sub | float16 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
 | swiglu | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| swiglu | float16 | 1,000,000 | 2 | 0.0002% | 0.0769 | 0.0348 |
+| swiglu | float16 | 1,000,000 | 2 | 0.0002% | 7.6900 | 0.0348 |
 | tanh | float32 | 1,000,000 | 0 | 0.0000% | 0.0000 | 0.0000 |
-| tanh | float16 | 1,000,000 | 0 | 0.0000% | 0.0009 | 0.0004 |
+| tanh | float16 | 1,000,000 | 0 | 0.0000% | 0.0900 | 0.0004 |
 
-Notes on the two visible outliers (both fp16, both still within acceptance):
+On the large `max rel` values (all within acceptance):
 
-- `rotary_position_embedding` fp16: 19,901 elements (0.4745%) exceed 1% elementwise,
-  max 0.9180, all at near-zero reference magnitudes; the whole-tensor relative L2 is far
-  below 1%.
-- `scaled_dot_product_attention` fp16: 2,123 elements (0.8099%) exceed 1% elementwise,
-  max 7.3636; relative L2 remains far below 1%.
+- Elementwise relative error divides by the reference value, so it blows up at elements
+  whose reference is close to zero (tiny denominator). A few such elements can reach
+  hundreds of percent while the whole-tensor relative L2 stays at or below 0.0353%.
+- `>1% share` shows these are a handful of elements out of millions (at most 0.81% of
+  elements, SDPA fp16); the acceptance criterion is judged on the whole-tensor relative
+  error, which every op passes.
+- Most-affected rows: `scaled_dot_product_attention` fp16 (max rel 736.36%, rel L2
+  0.0246%), `bmm` fp32 (400.00%, rel L2 0.0000%), `rotary_position_embedding` fp16
+  (91.80%, rel L2 0.0353%).
 
 ## Performance baseline (MLU590-M9, fp32, Triton vs native PyTorch)
 

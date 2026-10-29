@@ -35,5 +35,7 @@ finally:
     torch.backends.cnnl.allow_tf32 = original
 report = {"original_cnnl_allow_tf32": original, "torch": torch.__version__,
           "torch_mlu": torch_mlu.__version__, "triton": triton.__version__, "samples": records}
-(Path(__file__).resolve().parents[1] / "results/diagnostic_conv2d.json").write_text(
+_conv_out = Path(__file__).resolve().parents[1] / "results/diagnostic_conv2d.json"
+_conv_out.parent.mkdir(parents=True, exist_ok=True)
+_conv_out.write_text(
     json.dumps(report, indent=2), encoding="utf-8")
