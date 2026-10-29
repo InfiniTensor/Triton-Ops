@@ -630,6 +630,7 @@ def test_dropout_triton_deterministic(dtype):
 SDPA_SHAPES = [  # (B, H, M, N, D), deliberately mixing in M≠N, tile-unfriendly odd shapes, and small head_dim
     (1, 2, 64, 64, 64), (2, 4, 128, 128, 64),
     (1, 2, 300, 300, 64), (2, 3, 100, 150, 32),
+    (1, 2, 64, 64, 80), (1, 2, 128, 128, 96),  # non-power-of-2 head_dim (tl.arange must pad to next pow2)
 ]
 
 
@@ -677,6 +678,7 @@ MP2D_SHAPES = [  # (N, C, H, W, K, stride); None = defaults to K; includes non-d
     (2, 4, 10, 10, 2, 2),
     (1, 3, 9, 11, 3, 2),
     (2, 3, 9, 11, 2, 2),  # non-divisible tail block for the 2x2 fast path
+    (16, 64, 224, 224, 2, None),  # N*C*H_out = 114,688 > 65535: 2x2 fast path must grid-stride (MLU grid limit)
 ]
 
 

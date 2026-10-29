@@ -1150,7 +1150,7 @@ def dropout(x, y, p=0.5, seed=0):
 @triton.autotune(configs=_SDPA_CONFIGS, key=["M", "N", "D"])  # re-tunes only when the shape changes; same shape hits the cache
 @triton.jit
 def _sdpa_kernel(q_ptr, k_ptr, v_ptr, o_ptr, M, N, scale,
-                 BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, D: tl.constexpr):
+                 BLOCK_M: tl.constexpr, BLOCK_N: tl.constexpr, D: tl.constexpr, BLOCK_D: tl.constexpr):
     pid_m = tl.program_id(axis=0)                   # which row-block of Q
     pid_bh = tl.program_id(axis=1)                  # which batch·head
     # With contiguous memory, each (b, h) base address = index × elements per head
@@ -1160,19 +1160,20 @@ def _sdpa_kernel(q_ptr, k_ptr, v_ptr, o_ptr, M, N, scale,
     o_base = o_ptr + pid_bh * M * D
 
     offs_m = pid_m * BLOCK_M + tl.arange(0, BLOCK_M)
-    offs_d = tl.arange(0, D)
+    offs_d = tl.arange(0, BLOCK_D)                  # BLOCK_D = next_power_of_2(D): Triton requires a power-of-2 range
+    d_mask = offs_d < D                             # so head_dim 80/96 etc. work; padded lanes load 0 and never affect dot/softmax
     q = tl.load(q_base + offs_m[:, None] * D + offs_d[None, :],
-                mask=offs_m[:, None] < M, other=0.0)
+                mask=(offs_m[:, None] < M) & d_mask[None, :], other=0.0)
 
     m_i = tl.full((BLOCK_M,), float("-inf"), tl.float32)  # running per-row max
     l_i = tl.zeros((BLOCK_M,), tl.float32)                # per-row denominator (unnormalized)
-    acc = tl.zeros((BLOCK_M, D), tl.float32)              # per-row output accumulator (fp32)
+    acc = tl.zeros((BLOCK_M, BLOCK_D), tl.float32)        # per-row output accumulator (fp32)
 
     for start_n in range(0, N, BLOCK_N):                # sweep K/V block by block
         offs_n = start_n + tl.arange(0, BLOCK_N)
         n_mask = offs_n < N
         k = tl.load(k_base + offs_n[:, None] * D + offs_d[None, :],
-                    mask=n_mask[:, None], other=0.0)
+                    mask=n_mask[:, None] & d_mask[None, :], other=0.0)
         qk = tl.dot(q, tl.trans(k), input_precision="ieee") * scale
         qk = tl.where(n_mask[None, :], qk, float("-inf"))  # pad out-of-bounds columns with -inf so softmax zeroes them
         m_new = tl.maximum(m_i, tl.max(qk, 1))            # new per-row max
@@ -1181,13 +1182,13 @@ def _sdpa_kernel(q_ptr, k_ptr, v_ptr, o_ptr, M, N, scale,
         l_i = l_i * alpha + tl.sum(p, 1)
         acc = acc * alpha[:, None]
         v = tl.load(v_base + offs_n[:, None] * D + offs_d[None, :],
-                    mask=n_mask[:, None], other=0.0)
+                    mask=n_mask[:, None] & d_mask[None, :], other=0.0)
         acc += tl.dot(p.to(v.dtype), v, input_precision="ieee")
         m_i = m_new
 
     acc = acc / l_i[:, None]                              # divide by the denominator once at the end
     tl.store(o_base + offs_m[:, None] * D + offs_d[None, :],
-             acc.to(o_ptr.dtype.element_ty), mask=offs_m[:, None] < M)
+             acc.to(o_ptr.dtype.element_ty), mask=(offs_m[:, None] < M) & d_mask[None, :])
 
 
 def scaled_dot_product_attention(q, k, v, out, scale=None):
@@ -1200,7 +1201,7 @@ def scaled_dot_product_attention(q, k, v, out, scale=None):
         scale = 1.0 / (D ** 0.5)
     # autotune version: the grid becomes a lambda; BLOCK_M comes from the selected config
     grid = lambda META: (triton.cdiv(M, META["BLOCK_M"]), B * H)
-    _sdpa_kernel[grid](q, k, v, out, M, N, scale, D=D)
+    _sdpa_kernel[grid](q, k, v, out, M, N, scale, D=D, BLOCK_D=triton.next_power_of_2(D))
     return out
 
 
@@ -1331,28 +1332,33 @@ def _max_pool2d_kernel(x_ptr, y_ptr, C, H, W, KH, KW, H_out, W_out, stride,
 # Contiguous-read fast path for k=2, stride=2: one program owns "one output row of one (n,c) plus a column block".
 # Read 2*BLOCK_W contiguous elements per row → reshape to (BLOCK_W, 2) and take the max of the two window columns,
 # then max across the two rows; write BLOCK_W contiguous outputs. Avoids one stride-2 gather per element.
+# The grid's first dimension is capped at 65535 (the MLU limit, same pattern as _rope_kernel): when
+# N*C*H_out exceeds it, each program loops over rows with stride = num_programs (grid-stride loop).
 @triton.autotune(configs=[triton.Config({"BLOCK_W": b}, num_warps=w)
                           for b in (128, 256, 512) for w in (1, 4)],
                  key=["W_out"])
 @triton.jit
-def _max_pool2d_2x2_kernel(x_ptr, y_ptr, H, W, H_out, W_out, BLOCK_W: tl.constexpr):
-    pid_row = tl.program_id(axis=0)                 # (n*C + c) * H_out + oh
+def _max_pool2d_2x2_kernel(x_ptr, y_ptr, H, W, H_out, W_out, NC_H, BLOCK_W: tl.constexpr):
+    row0 = tl.program_id(axis=0)                    # first row handled by this program
+    nrows = tl.num_programs(axis=0)                 # grid is capped at 65535 → stride between rows
     pid_w = tl.program_id(axis=1)
-    oh = pid_row % H_out
-    nc = pid_row // H_out
 
     ow = pid_w * BLOCK_W + tl.arange(0, BLOCK_W)
     o_mask = ow < W_out
     iw = pid_w * BLOCK_W * 2 + tl.arange(0, BLOCK_W * 2)   # 2*BLOCK_W contiguous inputs per row
     i_mask = iw < W
 
-    base = nc * H * W + oh * 2 * W                  # two input rows: oh*2 and oh*2+1
-    r0 = tl.load(x_ptr + base + iw, mask=i_mask, other=float("-inf"))
-    r1 = tl.load(x_ptr + base + W + iw, mask=i_mask, other=float("-inf"))
-    v0 = tl.max(tl.reshape(r0, (BLOCK_W, 2)), axis=1)      # max of the two columns in the window
-    v1 = tl.max(tl.reshape(r1, (BLOCK_W, 2)), axis=1)
-    acc = tl.maximum(v0, v1)                               # max across the two rows
-    tl.store(y_ptr + nc * H_out * W_out + oh * W_out + ow, acc, mask=o_mask)
+    for pid_row in range(row0, NC_H, nrows):        # grid-stride loop over (n*C + c) * H_out + oh
+        oh = pid_row % H_out
+        nc = pid_row // H_out
+
+        base = nc * H * W + oh * 2 * W              # two input rows: oh*2 and oh*2+1
+        r0 = tl.load(x_ptr + base + iw, mask=i_mask, other=float("-inf"))
+        r1 = tl.load(x_ptr + base + W + iw, mask=i_mask, other=float("-inf"))
+        v0 = tl.max(tl.reshape(r0, (BLOCK_W, 2)), axis=1)      # max of the two columns in the window
+        v1 = tl.max(tl.reshape(r1, (BLOCK_W, 2)), axis=1)
+        acc = tl.maximum(v0, v1)                               # max across the two rows
+        tl.store(y_ptr + nc * H_out * W_out + oh * W_out + ow, acc, mask=o_mask)
 
 
 def max_pool2d(x, y, kernel_size=2, stride=None):
@@ -1366,8 +1372,9 @@ def max_pool2d(x, y, kernel_size=2, stride=None):
     H_out = (H - KH) // stride + 1
     W_out = (W - KW) // stride + 1
     if KH == 2 and KW == 2 and stride == 2:          # PyTorch default configuration (bench takes this path)
-        grid = lambda META: (N * C * H_out, triton.cdiv(W_out, META["BLOCK_W"]))
-        _max_pool2d_2x2_kernel[grid](x, y, H, W, H_out, W_out)
+        total = N * C * H_out                        # cap grid axis-0 at 65535 (MLU limit); the kernel grid-strides the rest
+        grid = lambda META: (min(total, 65535), triton.cdiv(W_out, META["BLOCK_W"]))
+        _max_pool2d_2x2_kernel[grid](x, y, H, W, H_out, W_out, NC_H=total)
         return y
     grid = lambda META: (N * C, triton.cdiv(H_out * W_out, META["BLOCK"]))
     _max_pool2d_kernel[grid](x, y, C, H, W, KH, KW, H_out, W_out, stride)
